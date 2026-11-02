@@ -4,25 +4,39 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>عيادة الأسنان</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0b6b6f">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="الأسنان">
+
 <style>
 :root{--ink:#18262b;--paper:#f3f6f6;--card:#fff;--line:#d3dddd;--accent:#0b6b6f;--danger:#b3261e;--muted:#5d6f73}
 *{box-sizing:border-box}
 body{margin:0;background:var(--paper);color:var(--ink);font-family:"Cairo","Segoe UI",Tahoma,sans-serif;font-size:16px;line-height:1.6}
 main{max-width:640px;margin:0 auto;padding:16px}
-h1{font-size:1.4rem;margin:0 0 8px}
-h2{font-size:1.1rem;margin:0 0 8px}
+h1{font-size:1.4rem;margin:0}
+h2{font-size:1.1rem;margin:16px 0 8px}
 p{margin:0 0 12px;color:var(--muted)}
-.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:10px}
 label{display:block;margin-bottom:10px;font-weight:600;font-size:.95rem}
-input,textarea{width:100%;padding:10px 12px;margin-top:4px;border:1px solid var(--line);border-radius:8px;font:inherit;background:#fff;color:var(--ink)}
-input:focus,textarea:focus,button:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+input,textarea,select{width:100%;padding:10px 12px;margin-top:4px;border:1px solid var(--line);border-radius:8px;font:inherit;background:#fff;color:var(--ink)}
+input:focus,textarea:focus,select:focus,button:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 button{font:inherit;font-weight:600;padding:10px 16px;border:0;border-radius:8px;background:var(--accent);color:#fff;cursor:pointer}
 button.ghost{background:transparent;color:var(--accent);border:1px solid var(--line)}
-button.danger{background:transparent;color:var(--danger);padding:4px 8px;font-size:.9rem}
+button.danger{background:transparent;color:var(--danger)}
+button.small{padding:4px 10px;font-size:.85rem}
+button.link{background:none;color:var(--ink);padding:0;font-size:1.05rem;text-align:right}
 .bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.tabs{display:flex;gap:8px;margin-bottom:12px}
+.tabs button{flex:1;background:#fff;color:var(--ink);border:1px solid var(--line)}
+.tabs button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
 .row{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
 .name{font-weight:700}
 .meta{color:var(--muted);font-size:.9rem}
+.actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.tag{display:inline-block;padding:0 8px;border-radius:99px;border:1px solid var(--line);font-size:.8rem;color:var(--muted)}
 summary{cursor:pointer;font-weight:700;color:var(--accent)}
 .err{color:var(--danger);min-height:1.4em;margin:0 0 8px}
 .ltr{direction:ltr;text-align:left}
@@ -37,11 +51,27 @@ const app = $('#app');
 let sb = null;
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = d => new Date(d).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' });
+const CASE_ST = { open: 'مفتوحة', closed: 'مكتملة' };
+const APPT_ST = { scheduled: 'محجوز', done: 'تم', cancelled: 'ملغي' };
 
 function getCfg() {
   try { return JSON.parse(localStorage.getItem('cfg') || 'null'); } catch (e) { return null; }
 }
 
+function shell(active, inner) {
+  app.innerHTML = `
+    <div class="bar"><h1>عيادة الأسنان</h1><button class="ghost" id="logout">خروج</button></div>
+    <nav class="tabs">
+      <button id="tp" class="${active === 'p' ? 'on' : ''}">المرضى</button>
+      <button id="ta" class="${active === 'a' ? 'on' : ''}">المواعيد</button>
+    </nav>${inner}`;
+  $('#logout').onclick = async () => { await sb.auth.signOut(); viewLogin(); };
+  $('#tp').onclick = viewPatients;
+  $('#ta').onclick = viewAppointments;
+}
+
+/* ---------- الإعداد وتسجيل الدخول ---------- */
 function viewSetup() {
   app.innerHTML = `
     <section class="card">
@@ -97,12 +127,9 @@ function viewLogin() {
   $('#reset').onclick = () => { localStorage.removeItem('cfg'); viewSetup(); };
 }
 
+/* ---------- المرضى ---------- */
 function viewPatients() {
-  app.innerHTML = `
-    <div class="bar">
-      <h1>المرضى</h1>
-      <button class="ghost" id="logout">خروج</button>
-    </div>
+  shell('p', `
     <details class="card" id="addBox">
       <summary>إضافة مريض</summary>
       <div style="margin-top:12px">
@@ -115,8 +142,7 @@ function viewPatients() {
       </div>
     </details>
     <label>بحث بالاسم <input id="search" type="search"></label>
-    <div id="list"></div>`;
-  $('#logout').onclick = async () => { await sb.auth.signOut(); viewLogin(); };
+    <div id="list"></div>`);
   $('#search').oninput = e => loadPatients(e.target.value.trim());
   $('#add').onclick = addPatient;
   loadPatients();
@@ -132,10 +158,7 @@ async function addPatient() {
     notes: $('#pnotes').value.trim() || null
   });
   if (error) { $('#err').textContent = 'تعذر الحفظ: ' + error.message; return; }
-  ['#pname', '#pphone', '#pbirth', '#pnotes'].forEach(s => $(s).value = '');
-  $('#err').textContent = '';
-  $('#addBox').open = false;
-  loadPatients();
+  viewPatients();
 }
 
 async function loadPatients(q = '') {
@@ -149,18 +172,169 @@ async function loadPatients(q = '') {
     <div class="card">
       <div class="row">
         <div>
-          <div class="name">${esc(p.name)}</div>
+          <button class="link" data-open="${esc(p.id)}">${esc(p.name)}</button>
           <div class="meta">${esc(p.phone || 'بدون تليفون')}${p.birth_date ? ' — ' + esc(p.birth_date) : ''}</div>
           ${p.notes ? `<div class="meta">${esc(p.notes)}</div>` : ''}
         </div>
-        <button class="danger" data-id="${esc(p.id)}">حذف</button>
+        <button class="danger small" data-del="${esc(p.id)}">حذف</button>
       </div>
     </div>`).join('');
-  list.querySelectorAll('button.danger').forEach(b => b.onclick = async () => {
+  list.querySelectorAll('[data-open]').forEach(b => b.onclick = () => viewPatient(b.dataset.open));
+  list.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
     if (!confirm('حذف المريض وكل حالاته ومواعيده؟')) return;
-    await sb.from('patients').delete().eq('id', b.dataset.id);
+    await sb.from('patients').delete().eq('id', b.dataset.del);
     loadPatients($('#search').value.trim());
   });
+}
+
+/* ---------- صفحة المريض: الحالات والمواعيد ---------- */
+async function viewPatient(id) {
+  shell('p', '<p>جارٍ التحميل...</p>');
+  const [pr, cr, ar] = await Promise.all([
+    sb.from('patients').select('*').eq('id', id).single(),
+    sb.from('cases').select('*').eq('patient_id', id).order('created_at', { ascending: false }),
+    sb.from('appointments').select('*').eq('patient_id', id).order('starts_at', { ascending: false })
+  ]);
+  if (pr.error) { app.insertAdjacentHTML('beforeend', `<p class="err">${esc(pr.error.message)}</p>`); return; }
+  const p = pr.data, cases = cr.data || [], appts = ar.data || [];
+  const caseName = cid => { const c = cases.find(x => x.id === cid); return c ? (c.complaint || 'حالة') : ''; };
+
+  shell('p', `
+    <button class="ghost small" id="back">رجوع للمرضى</button>
+    <div class="card" style="margin-top:10px">
+      <div class="name">${esc(p.name)}</div>
+      <div class="meta">${esc(p.phone || 'بدون تليفون')}${p.birth_date ? ' — ' + esc(p.birth_date) : ''}</div>
+      ${p.notes ? `<div class="meta">${esc(p.notes)}</div>` : ''}
+    </div>
+
+    <h2>الحالات</h2>
+    <details class="card">
+      <summary>إضافة حالة</summary>
+      <div style="margin-top:12px">
+        <label>الشكوى <input id="cc"></label>
+        <label>التشخيص <input id="cd"></label>
+        <label>العلاج <textarea id="ct" rows="2"></textarea></label>
+        <p class="err" id="cerr"></p>
+        <button id="cadd">حفظ الحالة</button>
+      </div>
+    </details>
+    ${cases.length ? cases.map(c => `
+      <div class="card">
+        <div class="row">
+          <div class="name">${esc(c.complaint || 'بدون شكوى')}</div>
+          <span class="tag">${esc(CASE_ST[c.status] || c.status)}</span>
+        </div>
+        ${c.diagnosis ? `<div class="meta">التشخيص: ${esc(c.diagnosis)}</div>` : ''}
+        ${c.treatment ? `<div class="meta">العلاج: ${esc(c.treatment)}</div>` : ''}
+        <div class="actions">
+          <button class="ghost small" data-ctoggle="${esc(c.id)}" data-st="${esc(c.status)}">${c.status === 'open' ? 'تحديد كمكتملة' : 'إعادة فتح'}</button>
+          <button class="danger small" data-cdel="${esc(c.id)}">حذف</button>
+        </div>
+      </div>`).join('') : '<p>لا توجد حالات بعد.</p>'}
+
+    <h2>المواعيد</h2>
+    <details class="card">
+      <summary>إضافة موعد</summary>
+      <div style="margin-top:12px">
+        <label>التاريخ والوقت <input id="adt" type="datetime-local" class="ltr"></label>
+        <label>الحالة المرتبطة (اختياري)
+          <select id="acase"><option value="">بدون</option>
+          ${cases.map(c => `<option value="${esc(c.id)}">${esc(c.complaint || 'حالة')}</option>`).join('')}</select></label>
+        <label>ملاحظات <input id="anotes"></label>
+        <p class="err" id="aerr"></p>
+        <button id="aadd">حفظ الموعد</button>
+      </div>
+    </details>
+    ${appts.length ? appts.map(a => apptCard(a, caseName(a.case_id))).join('') : '<p>لا توجد مواعيد بعد.</p>'}
+  `);
+
+  $('#back').onclick = viewPatients;
+
+  $('#cadd').onclick = async () => {
+    const complaint = $('#cc').value.trim();
+    if (!complaint) { $('#cerr').textContent = 'اكتب الشكوى.'; return; }
+    const { error } = await sb.from('cases').insert({
+      patient_id: id, complaint,
+      diagnosis: $('#cd').value.trim() || null,
+      treatment: $('#ct').value.trim() || null
+    });
+    if (error) { $('#cerr').textContent = 'تعذر الحفظ: ' + error.message; return; }
+    viewPatient(id);
+  };
+
+  $('#aadd').onclick = async () => {
+    const v = $('#adt').value;
+    if (!v) { $('#aerr').textContent = 'اختر التاريخ والوقت.'; return; }
+    const { error } = await sb.from('appointments').insert({
+      patient_id: id,
+      case_id: $('#acase').value || null,
+      starts_at: new Date(v).toISOString(),
+      notes: $('#anotes').value.trim() || null
+    });
+    if (error) { $('#aerr').textContent = 'تعذر الحفظ: ' + error.message; return; }
+    viewPatient(id);
+  };
+
+  document.querySelectorAll('[data-ctoggle]').forEach(b => b.onclick = async () => {
+    await sb.from('cases').update({ status: b.dataset.st === 'open' ? 'closed' : 'open' }).eq('id', b.dataset.ctoggle);
+    viewPatient(id);
+  });
+  document.querySelectorAll('[data-cdel]').forEach(b => b.onclick = async () => {
+    if (!confirm('حذف هذه الحالة؟')) return;
+    await sb.from('cases').delete().eq('id', b.dataset.cdel);
+    viewPatient(id);
+  });
+  bindAppts(() => viewPatient(id));
+}
+
+/* ---------- المواعيد ---------- */
+function apptCard(a, extra) {
+  const who = a.patients ? `<div class="name">${esc(a.patients.name)}</div>` : '';
+  return `
+    <div class="card">
+      <div class="row">
+        <div>
+          ${who}
+          <div class="${who ? 'meta' : 'name'}">${esc(fmt(a.starts_at))}</div>
+          ${extra ? `<div class="meta">${esc(extra)}</div>` : ''}
+          ${a.notes ? `<div class="meta">${esc(a.notes)}</div>` : ''}
+        </div>
+        <span class="tag">${esc(APPT_ST[a.status] || a.status)}</span>
+      </div>
+      <div class="actions">
+        <button class="ghost small" data-ast="done" data-aid="${esc(a.id)}">تم</button>
+        <button class="ghost small" data-ast="cancelled" data-aid="${esc(a.id)}">إلغاء</button>
+        <button class="ghost small" data-ast="scheduled" data-aid="${esc(a.id)}">إعادة حجز</button>
+        <button class="danger small" data-adel="${esc(a.id)}">حذف</button>
+      </div>
+    </div>`;
+}
+
+function bindAppts(reload) {
+  document.querySelectorAll('[data-ast]').forEach(b => b.onclick = async () => {
+    await sb.from('appointments').update({ status: b.dataset.ast }).eq('id', b.dataset.aid);
+    reload();
+  });
+  document.querySelectorAll('[data-adel]').forEach(b => b.onclick = async () => {
+    if (!confirm('حذف هذا الموعد؟')) return;
+    await sb.from('appointments').delete().eq('id', b.dataset.adel);
+    reload();
+  });
+}
+
+async function viewAppointments() {
+  shell('a', '<p>جارٍ التحميل...</p>');
+  const from = new Date(); from.setHours(0, 0, 0, 0);
+  const { data, error } = await sb.from('appointments')
+    .select('*, patients(name)')
+    .gte('starts_at', from.toISOString())
+    .order('starts_at', { ascending: true });
+  const box = document.createElement('div');
+  if (error) box.innerHTML = `<p class="err">تعذر تحميل المواعيد: ${esc(error.message)}</p>`;
+  else if (!data.length) box.innerHTML = '<p>لا توجد مواعيد قادمة. أضف موعداً من صفحة المريض.</p>';
+  else box.innerHTML = '<h2>المواعيد القادمة</h2>' + data.map(a => apptCard(a, '')).join('');
+  app.lastElementChild.replaceWith(box);
+  bindAppts(viewAppointments);
 }
 
 async function start() {
@@ -171,6 +345,9 @@ async function start() {
   session ? viewPatients() : viewLogin();
 }
 start();
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
 </script>
 </body>
 </html>
