@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>عيادة الأسنان</title>
+<style>
+:root{--ink:#18262b;--paper:#f3f6f6;--card:#fff;--line:#d3dddd;--accent:#0b6b6f;--danger:#b3261e;--muted:#5d6f73}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:"Cairo","Segoe UI",Tahoma,sans-serif;font-size:16px;line-height:1.6}
+main{max-width:640px;margin:0 auto;padding:16px}
+h1{font-size:1.4rem;margin:0 0 8px}
+h2{font-size:1.1rem;margin:0 0 8px}
+p{margin:0 0 12px;color:var(--muted)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:12px}
+label{display:block;margin-bottom:10px;font-weight:600;font-size:.95rem}
+input,textarea{width:100%;padding:10px 12px;margin-top:4px;border:1px solid var(--line);border-radius:8px;font:inherit;background:#fff;color:var(--ink)}
+input:focus,textarea:focus,button:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+button{font:inherit;font-weight:600;padding:10px 16px;border:0;border-radius:8px;background:var(--accent);color:#fff;cursor:pointer}
+button.ghost{background:transparent;color:var(--accent);border:1px solid var(--line)}
+button.danger{background:transparent;color:var(--danger);padding:4px 8px;font-size:.9rem}
+.bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.row{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.name{font-weight:700}
+.meta{color:var(--muted);font-size:.9rem}
+summary{cursor:pointer;font-weight:700;color:var(--accent)}
+.err{color:var(--danger);min-height:1.4em;margin:0 0 8px}
+.ltr{direction:ltr;text-align:left}
+</style>
+</head>
+<body>
+<main id="app"></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+const app = $('#app');
+let sb = null;
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function getCfg() {
+  try { return JSON.parse(localStorage.getItem('cfg') || 'null'); } catch (e) { return null; }
+}
+
+function viewSetup() {
+  app.innerHTML = `
+    <section class="card">
+      <h1>ربط التطبيق بقاعدة البيانات</h1>
+      <p>الصق بيانات مشروعك من Supabase. تُحفظ على هذا الجهاز فقط.</p>
+      <label>رابط المشروع (Project URL)
+        <input id="url" class="ltr" placeholder="https://xxxx.supabase.co" autocapitalize="off"></label>
+      <label>المفتاح العام (anon / publishable key)
+        <input id="key" class="ltr" autocapitalize="off"></label>
+      <p class="err" id="err"></p>
+      <button id="save">حفظ</button>
+    </section>`;
+  $('#save').onclick = () => {
+    const url = $('#url').value.trim();
+    const key = $('#key').value.trim();
+    if (!url.startsWith('https://') || !key) { $('#err').textContent = 'اكتب الرابط (يبدأ بـ https://) والمفتاح.'; return; }
+    localStorage.setItem('cfg', JSON.stringify({ url, key }));
+    start();
+  };
+}
+
+function viewLogin() {
+  app.innerHTML = `
+    <section class="card">
+      <h1>تسجيل الدخول</h1>
+      <label>البريد الإلكتروني
+        <input id="email" type="email" class="ltr" autocapitalize="off" autocomplete="username"></label>
+      <label>كلمة السر
+        <input id="pass" type="password" class="ltr" autocomplete="current-password"></label>
+      <p class="err" id="err"></p>
+      <button id="login">دخول</button>
+      <button class="ghost" id="reset">تغيير بيانات الاتصال</button>
+    </section>`;
+  $('#login').onclick = async () => {
+    $('#err').textContent = '';
+    let res;
+    try {
+      res = await sb.auth.signInWithPassword({ email: $('#email').value.trim(), password: $('#pass').value });
+    } catch (e) {
+      $('#err').textContent = 'تعذر الاتصال بالخادم. افتح الملف من Chrome وتأكد من الإنترنت وبيانات الربط.';
+      return;
+    }
+    const { error } = res;
+    if (error) {
+      const m = String(error.message || '');
+      $('#err').textContent = /fetch|network/i.test(m)
+        ? 'تعذر الاتصال بالخادم. افتح الملف من Chrome وتأكد من الإنترنت وبيانات الربط.'
+        : 'البريد أو كلمة السر غير صحيحة.';
+      return;
+    }
+    viewPatients();
+  };
+  $('#reset').onclick = () => { localStorage.removeItem('cfg'); viewSetup(); };
+}
+
+function viewPatients() {
+  app.innerHTML = `
+    <div class="bar">
+      <h1>المرضى</h1>
+      <button class="ghost" id="logout">خروج</button>
+    </div>
+    <details class="card" id="addBox">
+      <summary>إضافة مريض</summary>
+      <div style="margin-top:12px">
+        <label>الاسم <input id="pname"></label>
+        <label>التليفون <input id="pphone" type="tel" class="ltr"></label>
+        <label>تاريخ الميلاد <input id="pbirth" type="date" class="ltr"></label>
+        <label>ملاحظات <textarea id="pnotes" rows="2"></textarea></label>
+        <p class="err" id="err"></p>
+        <button id="add">حفظ المريض</button>
+      </div>
+    </details>
+    <label>بحث بالاسم <input id="search" type="search"></label>
+    <div id="list"></div>`;
+  $('#logout').onclick = async () => { await sb.auth.signOut(); viewLogin(); };
+  $('#search').oninput = e => loadPatients(e.target.value.trim());
+  $('#add').onclick = addPatient;
+  loadPatients();
+}
+
+async function addPatient() {
+  const name = $('#pname').value.trim();
+  if (!name) { $('#err').textContent = 'اكتب اسم المريض.'; return; }
+  const { error } = await sb.from('patients').insert({
+    name,
+    phone: $('#pphone').value.trim() || null,
+    birth_date: $('#pbirth').value || null,
+    notes: $('#pnotes').value.trim() || null
+  });
+  if (error) { $('#err').textContent = 'تعذر الحفظ: ' + error.message; return; }
+  ['#pname', '#pphone', '#pbirth', '#pnotes'].forEach(s => $(s).value = '');
+  $('#err').textContent = '';
+  $('#addBox').open = false;
+  loadPatients();
+}
+
+async function loadPatients(q = '') {
+  let query = sb.from('patients').select('*').order('created_at', { ascending: false });
+  if (q) query = query.ilike('name', '%' + q + '%');
+  const { data, error } = await query;
+  const list = $('#list');
+  if (error) { list.innerHTML = `<p class="err">تعذر تحميل المرضى: ${esc(error.message)}</p>`; return; }
+  if (!data.length) { list.innerHTML = '<p>لا يوجد مرضى بعد. اضغط "إضافة مريض" لتسجيل أول مريض.</p>'; return; }
+  list.innerHTML = data.map(p => `
+    <div class="card">
+      <div class="row">
+        <div>
+          <div class="name">${esc(p.name)}</div>
+          <div class="meta">${esc(p.phone || 'بدون تليفون')}${p.birth_date ? ' — ' + esc(p.birth_date) : ''}</div>
+          ${p.notes ? `<div class="meta">${esc(p.notes)}</div>` : ''}
+        </div>
+        <button class="danger" data-id="${esc(p.id)}">حذف</button>
+      </div>
+    </div>`).join('');
+  list.querySelectorAll('button.danger').forEach(b => b.onclick = async () => {
+    if (!confirm('حذف المريض وكل حالاته ومواعيده؟')) return;
+    await sb.from('patients').delete().eq('id', b.dataset.id);
+    loadPatients($('#search').value.trim());
+  });
+}
+
+async function start() {
+  const c = getCfg();
+  if (!c) { viewSetup(); return; }
+  sb = supabase.createClient(c.url, c.key);
+  const { data: { session } } = await sb.auth.getSession();
+  session ? viewPatients() : viewLogin();
+}
+start();
+</script>
+</body>
+</html>
