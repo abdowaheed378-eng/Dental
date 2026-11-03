@@ -75,7 +75,7 @@ const app = $('#app');
 let sb = null;
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const fmt = d => new Date(d).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' });
+const fmt = d => new Date(d).toLocaleString('ar-EG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 const money = n => Number(n || 0).toLocaleString('ar-EG') + ' ج.م';
 const dateOnly = d => new Date(d + 'T00:00:00').toLocaleDateString('ar-EG', { dateStyle: 'medium' });
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -83,6 +83,16 @@ const CASE_ST = { open: 'مفتوحة', closed: 'مكتملة' };
 const APPT_ST = { scheduled: 'محجوز', done: 'تم', cancelled: 'ملغي' };
 
 const slow = (p, ms = 12000) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
+function getDocs() { try { return JSON.parse(localStorage.getItem('doctors') || '[]'); } catch (e) { return []; } }
+function lastDoctor() { try { return localStorage.getItem('lastDoctor') || ''; } catch (e) { return ''; } }
+function rememberDoc(n) {
+  if (!n) return;
+  try {
+    const l = getDocs().filter(x => x !== n); l.unshift(n);
+    localStorage.setItem('doctors', JSON.stringify(l.slice(0, 10)));
+    localStorage.setItem('lastDoctor', n);
+  } catch (e) { /* لا شيء */ }
+}
 function lock(b) { b.disabled = true; return () => { b.disabled = false; }; }
 function showRetry(retry, msg) {
   const html = '<div><p class="err">' + esc(msg || 'الاتصال بطيء أو غير متاح.') + '</p><button class="ghost" id="retry">إعادة المحاولة</button></div>';
@@ -362,7 +372,8 @@ async function viewPatient(id, openAppt = false) {
   const totalFee = cases.reduce((s, c) => s + Number(c.fee || 0), 0);
   const paidTotal = payments.reduce((s, x) => s + Number(x.amount || 0), 0);
   const rest = totalFee - paidTotal;
-  const caseName = cid => { const c = cases.find(x => x.id === cid); return c ? (c.complaint || 'حالة') : ''; };
+  const docOpts = [...new Set([...getDocs(), ...cases.map(c => c.doctor).filter(Boolean)])];
+  const caseName = cid => { const c = cases.find(x => x.id === cid); return c ? (c.complaint || 'حالة') + (c.doctor ? ' — ' + c.doctor : '') : ''; };
 
   shell('p', `
     <button class="ghost small" id="back">رجوع للمرضى</button>
@@ -386,6 +397,8 @@ async function viewPatient(id, openAppt = false) {
         <label>التشخيص <input id="cd"></label>
         <label>العلاج <textarea id="ct" rows="2"></textarea></label>
         <label>التكلفة (ج.م) <input id="cf" type="number" inputmode="decimal" min="0" class="ltr"></label>
+        <label>الدكتور المعالج <input id="cdoc" list="docs" value="${esc(lastDoctor())}" autocomplete="off"></label>
+        <datalist id="docs">${docOpts.map(n => `<option value="${esc(n)}">`).join('')}</datalist>
         <p class="err" id="cerr"></p>
         <button id="cadd">حفظ الحالة</button>
       </div>
@@ -393,7 +406,7 @@ async function viewPatient(id, openAppt = false) {
     ${cases.length ? cases.map(c => `
       <div class="card">
         <div class="row">
-          <div class="name">${esc(c.complaint || 'بدون شكوى')}</div>
+          <div><div class="name">${esc(c.complaint || 'بدون شكوى')}</div>${c.doctor ? `<div class="meta">الدكتور المعالج: ${esc(c.doctor)}</div>` : ''}</div>
           <span class="tag">${esc(CASE_ST[c.status] || c.status)}</span>
         </div>
         ${c.diagnosis ? `<div class="meta">التشخيص: ${esc(c.diagnosis)}</div>` : ''}
@@ -401,6 +414,7 @@ async function viewPatient(id, openAppt = false) {
         ${Number(c.fee) > 0 ? `<div class="meta">التكلفة: ${esc(money(c.fee))} — المدفوع: ${esc(money(payments.filter(x => x.case_id === c.id).reduce((s, x) => s + Number(x.amount || 0), 0)))}</div>` : ''}
         <div class="actions">
           <button class="ghost small" data-ctoggle="${esc(c.id)}" data-st="${esc(c.status)}">${c.status === 'open' ? 'تحديد كمكتملة' : 'إعادة فتح'}</button>
+          <button class="ghost small" data-cdoc="${esc(c.id)}" data-doc="${esc(c.doctor || '')}">${c.doctor ? 'تعديل الدكتور' : 'إضافة الدكتور'}</button>
           <button class="danger small" data-cdel="${esc(c.id)}">حذف</button>
         </div>
       </div>`).join('') : '<p>لا توجد حالات بعد.</p>'}
@@ -458,9 +472,17 @@ async function viewPatient(id, openAppt = false) {
       patient_id: id, complaint,
       diagnosis: $('#cd').value.trim() || null,
       treatment: $('#ct').value.trim() || null,
-      fee: Number($('#cf').value) || 0
+      fee: Number($('#cf').value) || 0,
+      doctor: $('#cdoc').value.trim() || null
     });
-    if (error) { unlock(); $('#cerr').textContent = 'تعذر الحفظ: ' + error.message; return; }
+    if (error) {
+      unlock();
+      $('#cerr').textContent = /doctor/i.test(error.message)
+        ? 'لازم تضيف عمود الدكتور في Supabase أولاً (كود SQL).'
+        : 'تعذر الحفظ: ' + error.message;
+      return;
+    }
+    rememberDoc($('#cdoc').value.trim());
     viewPatient(id);
   };
 
@@ -486,6 +508,15 @@ async function viewPatient(id, openAppt = false) {
   document.querySelectorAll('[data-cdel]').forEach(b => b.onclick = async () => {
     if (!confirm('حذف هذه الحالة؟')) return;
     await sb.from('cases').delete().eq('id', b.dataset.cdel);
+    viewPatient(id);
+  });
+  document.querySelectorAll('[data-cdoc]').forEach(b => b.onclick = async () => {
+    const n = prompt('اسم الدكتور المعالج', b.dataset.doc || '');
+    if (n === null) return;
+    const name = n.trim();
+    const { error } = await sb.from('cases').update({ doctor: name || null }).eq('id', b.dataset.cdoc);
+    if (error) { alert('تعذر الحفظ: ' + error.message); return; }
+    rememberDoc(name);
     viewPatient(id);
   });
   if ($('#padd')) $('#padd').onclick = async (ev) => {
