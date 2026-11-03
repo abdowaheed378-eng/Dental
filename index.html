@@ -8,8 +8,8 @@
 <meta name="theme-color" content="#29677e">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-<noscript><link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet"></noscript>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700&display=swap" rel="stylesheet"></noscript>
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -46,6 +46,7 @@ button.link{background:none;color:var(--navy);border:0;padding:0;font-size:1.05r
 summary{cursor:pointer;font-weight:700;color:var(--navy)}
 .err{color:var(--danger);min-height:1.4em;margin:0 0 8px}
 .ltr{direction:ltr;text-align:left}
+.docname{font-weight:300;color:var(--muted);font-size:.92rem;margin-inline-start:8px}
 [hidden]{display:none !important}
 .sum{display:flex;justify-content:space-between;gap:8px;text-align:center}
 .sum>div{flex:1}
@@ -304,7 +305,7 @@ function renderPatients(rows, hasMore) {
     <div class="card">
       <div class="row">
         <div>
-          <button class="link" data-open="${esc(p.id)}">${esc(p.name)}</button>
+          <button class="link" data-open="${esc(p.id)}">${esc(p.name)}</button>${p.doctor ? `<span class="docname">— ${esc(p.doctor)}</span>` : ''}
           <div class="meta">${esc(p.phone || 'بدون تليفون')}${p.birth_date ? ' — ' + esc(p.birth_date) : ''}</div>
           ${p.notes ? `<div class="meta">${esc(p.notes)}</div>` : ''}
         </div>
@@ -321,6 +322,21 @@ function renderPatients(rows, hasMore) {
   });
   const more = $('#more');
   if (more) more.onclick = () => { more.disabled = true; loadPatients($('#search').value.trim(), true); };
+}
+
+async function attachDoctors(rows) {
+  if (!rows.length) return false;
+  try {
+    const { data, error } = await slow(sb.from('cases').select('patient_id,doctor,created_at')
+      .in('patient_id', rows.map(r => r.id)).not('doctor', 'is', null)
+      .order('created_at', { ascending: false }));
+    if (error || !data) return false;
+    const map = {};
+    data.forEach(c => { if (!map[c.patient_id]) map[c.patient_id] = c.doctor; });
+    let changed = false;
+    rows.forEach(r => { if (map[r.id] && r.doctor !== map[r.id]) { r.doctor = map[r.id]; changed = true; } });
+    return changed;
+  } catch (e) { return false; }
 }
 
 async function loadPatients(q = '', more = false) {
@@ -351,6 +367,7 @@ async function loadPatients(q = '', more = false) {
   shownPatients = more ? shownPatients.concat(rows) : rows;
   if (!q && !more) patientsCache = { rows, hasMore };
   renderPatients(shownPatients, hasMore);
+  attachDoctors(rows).then(changed => { if (changed && token === patientsToken) renderPatients(shownPatients, hasMore); });
 }
 
 /* ---------- صفحة المريض: الحالات والمواعيد ---------- */
