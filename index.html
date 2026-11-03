@@ -43,6 +43,8 @@ summary{cursor:pointer;font-weight:700;color:var(--accent)}
 .sum{display:flex;justify-content:space-between;gap:8px;text-align:center}
 .sum>div{flex:1}
 .due{color:var(--danger)}
+.btn{display:inline-block;font:inherit;font-weight:600;padding:4px 10px;border-radius:8px;border:1px solid var(--line);color:var(--accent);text-decoration:none;font-size:.85rem;background:transparent}
+.remind{width:100%;text-align:right;background:#e6f2f2;color:var(--accent);border:1px solid var(--accent);padding:10px 14px;border-radius:10px;margin-bottom:10px;font-weight:700}
 </style>
 </head>
 <body>
@@ -71,10 +73,64 @@ function shell(active, inner) {
     <nav class="tabs">
       <button id="tp" class="${active === 'p' ? 'on' : ''}">المرضى</button>
       <button id="ta" class="${active === 'a' ? 'on' : ''}">المواعيد</button>
-    </nav>${inner}`;
+    </nav><div id="todayBar"></div>${inner}`;
   $('#logout').onclick = async () => { await sb.auth.signOut(); viewLogin(); };
   $('#tp').onclick = viewPatients;
   $('#ta').onclick = viewAppointments;
+  if (active !== 'a') loadTodayBar();
+}
+
+/* ---------- التذكيرات ---------- */
+function waNumber(ph) {
+  let d = String(ph || '').replace(/[٠-٩]/g, c => '٠١٢٣٤٥٦٧٨٩'.indexOf(c)).replace(/\D/g, '');
+  if (!d) return '';
+  if (d.startsWith('00')) d = d.slice(2);
+  else if (d.startsWith('0')) d = '20' + d.slice(1);
+  return d;
+}
+
+function waLink(p, iso) {
+  const num = waNumber(p && p.phone);
+  if (!num) return '';
+  const d = new Date(iso);
+  const day = d.toLocaleDateString('ar-EG', { weekday: 'long', day: 'numeric', month: 'long' });
+  const time = d.toLocaleTimeString('ar-EG', { hour: 'numeric', minute: '2-digit' });
+  const msg = 'السلام عليكم ' + p.name + '، تذكير بموعدك في العيادة يوم ' + day + ' الساعة ' + time + '. نرجو تأكيد الحضور.';
+  return 'https://wa.me/' + num + '?text=' + encodeURIComponent(msg);
+}
+
+function calLink(name, iso, notes) {
+  const s = new Date(iso), e = new Date(s.getTime() + 30 * 60000);
+  const f = d => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  return 'https://calendar.google.com/calendar/render?action=TEMPLATE&text=' + encodeURIComponent('موعد: ' + name) +
+    '&dates=' + f(s) + '/' + f(e) + (notes ? '&details=' + encodeURIComponent(notes) : '');
+}
+
+function dayTag(iso) {
+  const d = new Date(iso); d.setHours(0, 0, 0, 0);
+  const t = new Date(); t.setHours(0, 0, 0, 0);
+  const diff = Math.round((d - t) / 86400000);
+  return diff === 0 ? 'اليوم' : diff === 1 ? 'غداً' : '';
+}
+
+async function loadTodayBar() {
+  const box = $('#todayBar');
+  if (!box) return;
+  const start = new Date(); start.setHours(0, 0, 0, 0);
+  const mid = new Date(start.getTime() + 86400000);
+  const end = new Date(start.getTime() + 2 * 86400000);
+  const { data, error } = await sb.from('appointments').select('starts_at')
+    .eq('status', 'scheduled')
+    .gte('starts_at', start.toISOString()).lt('starts_at', end.toISOString());
+  const bar = $('#todayBar');
+  if (!bar || error || !data || !data.length) return;
+  const t = data.filter(a => new Date(a.starts_at) < mid).length;
+  const m = data.length - t;
+  const parts = [];
+  if (t) parts.push('اليوم: ' + t);
+  if (m) parts.push('غداً: ' + m);
+  bar.innerHTML = '<button class="remind" id="goAppts">مواعيد قادمة — ' + parts.join(' | ') + '</button>';
+  $('#goAppts').onclick = viewAppointments;
 }
 
 /* ---------- الإعداد وتسجيل الدخول ---------- */
@@ -292,7 +348,7 @@ async function viewPatient(id) {
         <button id="aadd">حفظ الموعد</button>
       </div>
     </details>
-    ${appts.length ? appts.map(a => apptCard(a, caseName(a.case_id))).join('') : '<p>لا توجد مواعيد بعد.</p>'}
+    ${appts.length ? appts.map(a => apptCard(a, caseName(a.case_id), p)).join('') : '<p>لا توجد مواعيد بعد.</p>'}
   `);
 
   $('#back').onclick = viewPatients;
@@ -354,20 +410,26 @@ async function viewPatient(id) {
 }
 
 /* ---------- المواعيد ---------- */
-function apptCard(a, extra) {
+function apptCard(a, extra, patient) {
+  const pt = patient || a.patients || null;
   const who = a.patients ? `<div class="name">${esc(a.patients.name)}</div>` : '';
+  const dt = dayTag(a.starts_at);
+  const wa = a.status === 'scheduled' && pt ? waLink(pt, a.starts_at) : '';
+  const cal = a.status === 'scheduled' && pt ? calLink(pt.name, a.starts_at, a.notes) : '';
   return `
     <div class="card">
       <div class="row">
         <div>
           ${who}
-          <div class="${who ? 'meta' : 'name'}">${esc(fmt(a.starts_at))}</div>
+          <div class="${who ? 'meta' : 'name'}">${esc(fmt(a.starts_at))}${dt ? ' — ' + esc(dt) : ''}</div>
           ${extra ? `<div class="meta">${esc(extra)}</div>` : ''}
           ${a.notes ? `<div class="meta">${esc(a.notes)}</div>` : ''}
         </div>
         <span class="tag">${esc(APPT_ST[a.status] || a.status)}</span>
       </div>
       <div class="actions">
+        ${wa ? `<a class="btn" href="${esc(wa)}" target="_blank" rel="noopener">تذكير واتساب</a>` : ''}
+        ${cal ? `<a class="btn" href="${esc(cal)}" target="_blank" rel="noopener">أضف للتقويم</a>` : ''}
         <button class="ghost small" data-ast="done" data-aid="${esc(a.id)}">تم</button>
         <button class="ghost small" data-ast="cancelled" data-aid="${esc(a.id)}">إلغاء</button>
         <button class="ghost small" data-ast="scheduled" data-aid="${esc(a.id)}">إعادة حجز</button>
@@ -392,7 +454,7 @@ async function viewAppointments() {
   shell('a', '<p>جارٍ التحميل...</p>');
   const from = new Date(); from.setHours(0, 0, 0, 0);
   const { data, error } = await sb.from('appointments')
-    .select('*, patients(name)')
+    .select('*, patients(name, phone)')
     .gte('starts_at', from.toISOString())
     .order('starts_at', { ascending: true });
   const box = document.createElement('div');
