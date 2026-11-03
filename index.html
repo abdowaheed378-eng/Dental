@@ -18,12 +18,12 @@
 :root{--navy:#14213d;--navy-2:#22345c;--ink:#14213d;--paper:#f4f6fa;--card:#ffffff;--line:#d9dfeb;--edge:#c5cde0;--danger:#a4262c;--muted:#5b6780;--soft:#e8edf6}
 *{box-sizing:border-box}
 body{margin:0;padding-bottom:calc(78px + env(safe-area-inset-bottom,0px));background:var(--paper);color:var(--ink);font-family:"Cairo","Segoe UI",Tahoma,sans-serif;font-size:16px;line-height:1.6}
-main{max-width:640px;margin:0 auto;padding:16px}
+main{max-width:640px;margin:0 auto;padding:16px;position:relative;z-index:1}
 h1{font-size:1.4rem;margin:0}
 h2{font-size:1.05rem;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line)}
 p{margin:0 0 12px;color:var(--muted)}
 .brand{font-family:Georgia,"Times New Roman",serif;font-size:2.2rem;font-weight:700;text-align:center;letter-spacing:.08em;margin:28px 0 16px;color:var(--navy)}
-.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:10px}
+.card{background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:10px}
 .card h1{margin-bottom:8px}
 label{display:block;margin-bottom:10px;font-weight:600;font-size:.95rem}
 input,textarea,select{width:100%;padding:10px 12px;margin-top:4px;border:1px solid var(--edge);border-radius:6px;font:inherit;background:#fff;color:var(--ink)}
@@ -60,6 +60,7 @@ details.card>summary::before{content:"+  ";font-weight:700}
 details.card[open]>summary::before{content:"\2212  "}
 details.card>div{padding:14px !important;margin-top:0 !important}
 .btn.primary{background:var(--navy);color:#fff;border-color:var(--navy)}
+body::before{content:"";position:fixed;left:0;right:0;top:0;bottom:0;background:url(watermark.png) center 40%/min(92vw,520px) no-repeat;opacity:.10;pointer-events:none;z-index:0}
 </style>
 </head>
 <body>
