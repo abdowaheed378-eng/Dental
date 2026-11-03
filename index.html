@@ -104,6 +104,18 @@ const CASE_ST = { open: 'مفتوحة', closed: 'مكتملة' };
 const APPT_ST = { scheduled: 'محجوز', done: 'تم', cancelled: 'ملغي' };
 
 const slow = (p, ms = 12000) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
+function ageOf(p) {
+  if (p.age != null && p.age !== '') return Number(p.age);
+  if (p.birth_date) {
+    const b = new Date(p.birth_date), t = new Date();
+    let a = t.getFullYear() - b.getFullYear();
+    const m = t.getMonth() - b.getMonth();
+    if (m < 0 || (m === 0 && t.getDate() < b.getDate())) a--;
+    return a >= 0 ? a : null;
+  }
+  return null;
+}
+const ageText = p => { const a = ageOf(p); return a == null ? '' : a + ' سنة'; };
 function getDocs() { try { return JSON.parse(localStorage.getItem('doctors') || '[]'); } catch (e) { return []; } }
 function lastDoctor() { try { return localStorage.getItem('lastDoctor') || ''; } catch (e) { return ''; } }
 function rememberDoc(n) {
@@ -286,7 +298,7 @@ function viewPatients() {
       <div style="margin-top:12px">
         <label>الاسم <input id="pname"></label>
         <label>التليفون <input id="pphone" type="tel" class="ltr"></label>
-        <label>تاريخ الميلاد <input id="pbirth" type="date" class="ltr"></label>
+        <label>العمر (بالسنوات) <input id="page" type="number" inputmode="numeric" min="0" max="120" class="ltr"></label>
         <label>ملاحظات <textarea id="pnotes" rows="2"></textarea></label>
         <p class="err" id="err"></p>
         <div class="actions" style="margin-top:0">
@@ -316,10 +328,16 @@ async function addPatient(openAppt) {
   const { data, error } = await sb.from('patients').insert({
     name,
     phone: $('#pphone').value.trim() || null,
-    birth_date: $('#pbirth').value || null,
+    age: $('#page').value ? Number($('#page').value) : null,
     notes: $('#pnotes').value.trim() || null
   }).select().single();
-  if (error) { setBusy(false); $('#err').textContent = 'تعذر الحفظ: ' + error.message; return; }
+  if (error) {
+    setBusy(false);
+    $('#err').textContent = /age/i.test(error.message)
+      ? 'لازم تضيف عمود العمر في Supabase أولاً (كود SQL).'
+      : 'تعذر الحفظ: ' + error.message;
+    return;
+  }
   patientsCache = null;
   if (openAppt && data) { if (wide.matches) viewPatients(); viewPatient(data.id, true); }
   else viewPatients();
@@ -334,7 +352,7 @@ function renderPatients(rows, hasMore) {
       <div class="row">
         <div>
           <button class="link" data-open="${esc(p.id)}">${esc(p.name)}</button>${p.doctor ? `<span class="docname">— ${esc(p.doctor)}</span>` : ''}
-          <div class="meta">${esc(p.phone || 'بدون تليفون')}${p.birth_date ? ' — ' + esc(p.birth_date) : ''}</div>
+          <div class="meta">${esc(p.phone || 'بدون تليفون')}${ageText(p) ? ' — ' + esc(ageText(p)) : ''}</div>
           ${p.notes ? `<div class="meta">${esc(p.notes)}</div>` : ''}
         </div>
         <button class="danger small" data-del="${esc(p.id)}">حذف</button>
@@ -379,7 +397,7 @@ async function loadPatients(q = '', more = false) {
   }
   let res;
   try {
-    let query = sb.from('patients').select('id,name,phone,birth_date,notes')
+    let query = sb.from('patients').select('id,name,phone,age,birth_date,notes')
       .order('created_at', { ascending: false }).range(offset, offset + PAGE);
     if (q) query = query.ilike('name', '%' + q + '%');
     res = await slow(query);
@@ -434,8 +452,9 @@ async function viewPatient(id, openAppt = false) {
     <button class="ghost small" id="back">رجوع للمرضى</button>
     <div class="card" style="margin-top:10px">
       <div class="name">${esc(p.name)}</div>
-      <div class="meta">${esc(p.phone || 'بدون تليفون')}${p.birth_date ? ' — ' + esc(p.birth_date) : ''}</div>
+      <div class="meta">${esc(p.phone || 'بدون تليفون')}${ageText(p) ? ' — ' + esc(ageText(p)) : ''}</div>
       ${p.notes ? `<div class="meta">${esc(p.notes)}</div>` : ''}
+      <div class="actions"><button class="ghost small" id="editAge">تعديل العمر</button></div>
     </div>
 
     <div class="card sum">
@@ -565,6 +584,18 @@ async function viewPatient(id, openAppt = false) {
     await sb.from('cases').delete().eq('id', b.dataset.cdel);
     viewPatient(id);
   });
+  $('#editAge').onclick = async () => {
+    const v = prompt('عمر المريض (بالسنوات)', ageOf(p) ?? '');
+    if (v === null) return;
+    const t = v.trim();
+    const n = t === '' ? null : Number(t);
+    if (n !== null && !(n >= 0 && n <= 120)) { alert('اكتب عمراً صحيحاً.'); return; }
+    const { error } = await sb.from('patients').update({ age: n }).eq('id', id);
+    if (error) { alert(/age/i.test(error.message) ? 'لازم تضيف عمود العمر في Supabase أولاً (كود SQL).' : 'تعذر الحفظ: ' + error.message); return; }
+    patientsCache = null;
+    if ($('#search')) loadPatients($('#search').value.trim());
+    viewPatient(id);
+  };
   document.querySelectorAll('[data-cdoc]').forEach(b => b.onclick = async () => {
     const n = prompt('اسم الدكتور المعالج', b.dataset.doc || '');
     if (n === null) return;
