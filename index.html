@@ -44,6 +44,7 @@ button.link{background:none;color:var(--navy);border:0;padding:0;font-size:1.05r
 summary{cursor:pointer;font-weight:700;color:var(--navy)}
 .err{color:var(--danger);min-height:1.4em;margin:0 0 8px}
 .ltr{direction:ltr;text-align:left}
+[hidden]{display:none !important}
 .sum{display:flex;justify-content:space-between;gap:8px;text-align:center}
 .sum>div{flex:1}
 .sum .name{font-size:1.1rem}
@@ -223,27 +224,33 @@ function viewPatients() {
         <label>تاريخ الميلاد <input id="pbirth" type="date" class="ltr"></label>
         <label>ملاحظات <textarea id="pnotes" rows="2"></textarea></label>
         <p class="err" id="err"></p>
-        <button id="add">حفظ المريض</button>
+        <div class="actions" style="margin-top:0">
+          <button id="add">حفظ المريض</button>
+          <button class="ghost" id="addAppt" hidden>حفظ وحجز موعد</button>
+        </div>
       </div>
     </details>
     <label>بحث بالاسم <input id="search" type="search"></label>
     <div id="list"></div>`);
   $('#search').oninput = e => loadPatients(e.target.value.trim());
-  $('#add').onclick = addPatient;
+  $('#add').onclick = () => addPatient(false);
+  $('#addAppt').onclick = () => addPatient(true);
+  $('#pname').oninput = () => { $('#addAppt').hidden = !$('#pname').value.trim(); };
   loadPatients();
 }
 
-async function addPatient() {
+async function addPatient(openAppt) {
   const name = $('#pname').value.trim();
   if (!name) { $('#err').textContent = 'اكتب اسم المريض.'; return; }
-  const { error } = await sb.from('patients').insert({
+  const { data, error } = await sb.from('patients').insert({
     name,
     phone: $('#pphone').value.trim() || null,
     birth_date: $('#pbirth').value || null,
     notes: $('#pnotes').value.trim() || null
-  });
+  }).select().single();
   if (error) { $('#err').textContent = 'تعذر الحفظ: ' + error.message; return; }
-  viewPatients();
+  if (openAppt && data) viewPatient(data.id, true);
+  else viewPatients();
 }
 
 async function loadPatients(q = '') {
@@ -273,7 +280,7 @@ async function loadPatients(q = '') {
 }
 
 /* ---------- صفحة المريض: الحالات والمواعيد ---------- */
-async function viewPatient(id) {
+async function viewPatient(id, openAppt = false) {
   shell('p', '<p>جارٍ التحميل...</p>');
   const [pr, cr, ar, payr] = await Promise.all([
     sb.from('patients').select('*').eq('id', id).single(),
@@ -430,6 +437,11 @@ async function viewPatient(id) {
     viewPatient(id);
   });
   bindAppts(() => viewPatient(id));
+
+  if (openAppt) {
+    const box = $('#adt') && $('#adt').closest('details');
+    if (box) { box.open = true; box.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+  }
 }
 
 /* ---------- المواعيد ---------- */
