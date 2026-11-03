@@ -2,49 +2,64 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Sukon</title>
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#8a5a3c">
+<meta name="theme-color" content="#14213d">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Sukon">
 
 <style>
-:root{--ink:#3b2a20;--paper:#f6efe6;--card:#fffaf3;--line:#e3d5c4;--accent:#8a5a3c;--danger:#a33a2a;--muted:#7a6757}
+:root{--navy:#14213d;--navy-2:#22345c;--ink:#14213d;--paper:#f4f6fa;--card:#ffffff;--line:#d9dfeb;--edge:#c5cde0;--danger:#a4262c;--muted:#5b6780;--soft:#e8edf6}
 *{box-sizing:border-box}
-body{margin:0;background:var(--paper);color:var(--ink);font-family:"Cairo","Segoe UI",Tahoma,sans-serif;font-size:16px;line-height:1.6}
+body{margin:0;padding-bottom:calc(78px + env(safe-area-inset-bottom,0px));background:var(--paper);color:var(--ink);font-family:"Cairo","Segoe UI",Tahoma,sans-serif;font-size:16px;line-height:1.6}
 main{max-width:640px;margin:0 auto;padding:16px}
-h1{font-size:1.5rem;margin:0;letter-spacing:.04em}
-h2{font-size:1.1rem;margin:16px 0 8px}
+h1{font-size:1.4rem;margin:0}
+h2{font-size:1.05rem;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line)}
 p{margin:0 0 12px;color:var(--muted)}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:10px;box-shadow:0 1px 2px rgba(59,42,32,.06)}
+.brand{font-family:Georgia,"Times New Roman",serif;font-size:2.2rem;font-weight:700;text-align:center;letter-spacing:.08em;margin:28px 0 16px;color:var(--navy)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:10px}
+.card h1{margin-bottom:8px}
 label{display:block;margin-bottom:10px;font-weight:600;font-size:.95rem}
-input,textarea,select{width:100%;padding:10px 12px;margin-top:4px;border:1px solid var(--line);border-radius:8px;font:inherit;background:#fffdf9;color:var(--ink)}
-input:focus,textarea:focus,select:focus,button:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-button{font:inherit;font-weight:600;padding:10px 16px;border:0;border-radius:8px;background:var(--accent);color:#fff;cursor:pointer}
-button.ghost{background:transparent;color:var(--accent);border:1px solid var(--line)}
-button.danger{background:transparent;color:var(--danger)}
+input,textarea,select{width:100%;padding:10px 12px;margin-top:4px;border:1px solid var(--edge);border-radius:6px;font:inherit;background:#fff;color:var(--ink)}
+input:focus,textarea:focus,select:focus,button:focus-visible,summary:focus-visible,.btn:focus-visible{outline:2px solid var(--navy-2);outline-offset:1px}
+button{font:inherit;font-weight:600;padding:10px 18px;border:1px solid var(--navy);border-radius:6px;background:var(--navy);color:#fff;cursor:pointer}
+button.ghost{background:#fff;color:var(--navy);border:1px solid var(--edge)}
+button.danger{background:transparent;color:var(--danger);border-color:transparent}
 button.small{padding:4px 10px;font-size:.85rem}
-button.link{background:none;color:var(--ink);padding:0;font-size:1.05rem;text-align:right}
-.bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
-.tabs{display:flex;gap:8px;margin-bottom:12px}
-.tabs button{flex:1;background:var(--card);color:var(--ink);border:1px solid var(--line)}
-.tabs button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+button.link{background:none;color:var(--navy);border:0;padding:0;font-size:1.05rem;text-align:right}
+.bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;background:var(--navy);color:#fff;padding:12px 16px;border-radius:8px}
+.bar h1{font-family:Georgia,"Times New Roman",serif;letter-spacing:.08em;color:#fff;font-size:1.5rem}
+.bar button.ghost{background:transparent;color:#fff;border-color:rgba(255,255,255,.45)}
 .row{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
 .name{font-weight:700}
 .meta{color:var(--muted);font-size:.9rem}
 .actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
-.tag{display:inline-block;padding:0 8px;border-radius:99px;border:1px solid var(--line);font-size:.8rem;color:var(--muted)}
-summary{cursor:pointer;font-weight:700;color:var(--accent)}
+.tag{display:inline-block;padding:0 8px;border-radius:4px;border:1px solid var(--edge);font-size:.8rem;color:var(--muted);background:var(--soft)}
+summary{cursor:pointer;font-weight:700;color:var(--navy)}
 .err{color:var(--danger);min-height:1.4em;margin:0 0 8px}
 .ltr{direction:ltr;text-align:left}
 .sum{display:flex;justify-content:space-between;gap:8px;text-align:center}
 .sum>div{flex:1}
+.sum .name{font-size:1.1rem}
 .due{color:var(--danger)}
-.btn{display:inline-block;font:inherit;font-weight:600;padding:4px 10px;border-radius:8px;border:1px solid var(--line);color:var(--accent);text-decoration:none;font-size:.85rem;background:transparent}
-.remind{width:100%;text-align:right;background:#f1e2d1;color:var(--accent);border:1px solid var(--accent);padding:10px 14px;border-radius:10px;margin-bottom:10px;font-weight:700}
+.btn{display:inline-block;font:inherit;font-weight:600;padding:4px 10px;border-radius:6px;border:1px solid var(--edge);color:var(--navy);text-decoration:none;font-size:.85rem;background:#fff}
+.remind{width:100%;text-align:right;background:var(--soft);color:var(--navy);border:1px solid var(--navy);padding:10px 14px;border-radius:8px;margin-bottom:10px;font-weight:700}
+.bottomnav{position:fixed;left:0;right:0;bottom:0;display:flex;background:#fff;border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px);z-index:10}
+.bottomnav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;background:transparent;color:var(--muted);border:0;border-top:3px solid transparent;border-radius:0;padding:8px 0 10px;font-size:.8rem}
+.bottomnav button.on{color:var(--navy);border-top-color:var(--navy)}
+details.card{padding:0;overflow:hidden}
+details.card>summary{list-style:none;display:block;text-align:center;background:var(--navy);color:#fff;padding:12px 14px}
+details.card>summary::-webkit-details-marker{display:none}
+details.card>summary::before{content:"+  ";font-weight:700}
+details.card[open]>summary::before{content:"\2212  "}
+details.card>div{padding:14px !important;margin-top:0 !important}
+.btn.primary{background:var(--navy);color:#fff;border-color:var(--navy)}
 </style>
 </head>
 <body>
@@ -70,10 +85,15 @@ function getCfg() {
 function shell(active, inner) {
   app.innerHTML = `
     <div class="bar"><h1>Sukon</h1><button class="ghost" id="logout">خروج</button></div>
-    <nav class="tabs">
-      <button id="tp" class="${active === 'p' ? 'on' : ''}">المرضى</button>
-      <button id="ta" class="${active === 'a' ? 'on' : ''}">المواعيد</button>
-    </nav><div id="todayBar"></div>${inner}`;
+    <div id="todayBar"></div>${inner}
+    <nav class="bottomnav">
+      <button id="tp" class="${active === 'p' ? 'on' : ''}">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 19c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><circle cx="17" cy="9" r="2.4"/><path d="M16 14.2c2.8 0 5 1.8 5 4.8"/></svg>
+        <span>المرضى</span></button>
+      <button id="ta" class="${active === 'a' ? 'on' : ''}">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>
+        <span>المواعيد</span></button>
+    </nav>`;
   $('#logout').onclick = async () => { await sb.auth.signOut(); viewLogin(); };
   $('#tp').onclick = viewPatients;
   $('#ta').onclick = viewAppointments;
@@ -136,6 +156,7 @@ async function loadTodayBar() {
 /* ---------- الإعداد وتسجيل الدخول ---------- */
 function viewSetup() {
   app.innerHTML = `
+    <div class="brand">Sukon</div>
     <section class="card">
       <h1>ربط التطبيق بقاعدة البيانات</h1>
       <p>الصق بيانات مشروعك من Supabase. تُحفظ على هذا الجهاز فقط.</p>
@@ -157,6 +178,7 @@ function viewSetup() {
 
 function viewLogin() {
   app.innerHTML = `
+    <div class="brand">Sukon</div>
     <section class="card">
       <h1>تسجيل الدخول</h1>
       <label>البريد الإلكتروني
@@ -414,8 +436,10 @@ function apptCard(a, extra, patient) {
   const pt = patient || a.patients || null;
   const who = a.patients ? `<div class="name">${esc(a.patients.name)}</div>` : '';
   const dt = dayTag(a.starts_at);
-  const wa = a.status === 'scheduled' && pt ? waLink(pt, a.starts_at) : '';
-  const cal = a.status === 'scheduled' && pt ? calLink(pt.name, a.starts_at, a.notes) : '';
+  const sched = a.status === 'scheduled';
+  const wa = sched && pt ? waLink(pt, a.starts_at) : '';
+  const cal = sched && pt ? calLink(pt.name, a.starts_at, a.notes) : '';
+  const id = esc(a.id);
   return `
     <div class="card">
       <div class="row">
@@ -427,13 +451,16 @@ function apptCard(a, extra, patient) {
         </div>
         <span class="tag">${esc(APPT_ST[a.status] || a.status)}</span>
       </div>
-      <div class="actions">
-        ${wa ? `<a class="btn" href="${esc(wa)}" target="_blank" rel="noopener">تذكير واتساب</a>` : ''}
+      ${(wa || cal) ? `<div class="actions">
+        ${wa ? `<a class="btn primary" href="${esc(wa)}" target="_blank" rel="noopener">تذكير واتساب</a>` : ''}
         ${cal ? `<a class="btn" href="${esc(cal)}" target="_blank" rel="noopener">أضف للتقويم</a>` : ''}
-        <button class="ghost small" data-ast="done" data-aid="${esc(a.id)}">تم</button>
-        <button class="ghost small" data-ast="cancelled" data-aid="${esc(a.id)}">إلغاء</button>
-        <button class="ghost small" data-ast="scheduled" data-aid="${esc(a.id)}">إعادة حجز</button>
-        <button class="danger small" data-adel="${esc(a.id)}">حذف</button>
+      </div>` : ''}
+      <div class="actions">
+        ${sched
+          ? `<button class="small" data-ast="done" data-aid="${id}">تم</button>
+             <button class="ghost small" data-ast="cancelled" data-aid="${id}">إلغاء</button>`
+          : `<button class="ghost small" data-ast="scheduled" data-aid="${id}">إعادة حجز</button>`}
+        <button class="danger small" data-adel="${id}">حذف</button>
       </div>
     </div>`;
 }
@@ -451,7 +478,7 @@ function bindAppts(reload) {
 }
 
 async function viewAppointments() {
-  shell('a', '<p>جارٍ التحميل...</p>');
+  shell('a', '<p id="loading">جارٍ التحميل...</p>');
   const from = new Date(); from.setHours(0, 0, 0, 0);
   const { data, error } = await sb.from('appointments')
     .select('*, patients(name, phone)')
@@ -461,7 +488,7 @@ async function viewAppointments() {
   if (error) box.innerHTML = `<p class="err">تعذر تحميل المواعيد: ${esc(error.message)}</p>`;
   else if (!data.length) box.innerHTML = '<p>لا توجد مواعيد قادمة. أضف موعداً من صفحة المريض.</p>';
   else box.innerHTML = '<h2>المواعيد القادمة</h2>' + data.map(a => apptCard(a, '')).join('');
-  app.lastElementChild.replaceWith(box);
+  const ld = $('#loading'); if (ld) ld.replaceWith(box);
   bindAppts(viewAppointments);
 }
 
