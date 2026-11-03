@@ -40,6 +40,9 @@ button.link{background:none;color:var(--ink);padding:0;font-size:1.05rem;text-al
 summary{cursor:pointer;font-weight:700;color:var(--accent)}
 .err{color:var(--danger);min-height:1.4em;margin:0 0 8px}
 .ltr{direction:ltr;text-align:left}
+.sum{display:flex;justify-content:space-between;gap:8px;text-align:center}
+.sum>div{flex:1}
+.due{color:var(--danger)}
 </style>
 </head>
 <body>
@@ -52,6 +55,9 @@ let sb = null;
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt = d => new Date(d).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' });
+const money = n => Number(n || 0).toLocaleString('ar-EG') + ' ج.م';
+const dateOnly = d => new Date(d + 'T00:00:00').toLocaleDateString('ar-EG', { dateStyle: 'medium' });
+const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 const CASE_ST = { open: 'مفتوحة', closed: 'مكتملة' };
 const APPT_ST = { scheduled: 'محجوز', done: 'تم', cancelled: 'ملغي' };
 
@@ -190,13 +196,19 @@ async function loadPatients(q = '') {
 /* ---------- صفحة المريض: الحالات والمواعيد ---------- */
 async function viewPatient(id) {
   shell('p', '<p>جارٍ التحميل...</p>');
-  const [pr, cr, ar] = await Promise.all([
+  const [pr, cr, ar, payr] = await Promise.all([
     sb.from('patients').select('*').eq('id', id).single(),
     sb.from('cases').select('*').eq('patient_id', id).order('created_at', { ascending: false }),
-    sb.from('appointments').select('*').eq('patient_id', id).order('starts_at', { ascending: false })
+    sb.from('appointments').select('*').eq('patient_id', id).order('starts_at', { ascending: false }),
+    sb.from('payments').select('*').eq('patient_id', id).order('paid_at', { ascending: false })
   ]);
   if (pr.error) { app.insertAdjacentHTML('beforeend', `<p class="err">${esc(pr.error.message)}</p>`); return; }
   const p = pr.data, cases = cr.data || [], appts = ar.data || [];
+  const payments = payr.error ? [] : (payr.data || []);
+  const payErr = payr.error ? 'لم يتم إنشاء جدول المدفوعات بعد. شغّل كود SQL الخاص بها في Supabase.' : '';
+  const totalFee = cases.reduce((s, c) => s + Number(c.fee || 0), 0);
+  const paidTotal = payments.reduce((s, x) => s + Number(x.amount || 0), 0);
+  const rest = totalFee - paidTotal;
   const caseName = cid => { const c = cases.find(x => x.id === cid); return c ? (c.complaint || 'حالة') : ''; };
 
   shell('p', `
@@ -207,6 +219,12 @@ async function viewPatient(id) {
       ${p.notes ? `<div class="meta">${esc(p.notes)}</div>` : ''}
     </div>
 
+    <div class="card sum">
+      <div><div class="meta">الإجمالي</div><div class="name">${money(totalFee)}</div></div>
+      <div><div class="meta">المدفوع</div><div class="name">${money(paidTotal)}</div></div>
+      <div><div class="meta">المتبقي</div><div class="name ${rest > 0 ? 'due' : ''}">${money(rest)}</div></div>
+    </div>
+
     <h2>الحالات</h2>
     <details class="card">
       <summary>إضافة حالة</summary>
@@ -214,6 +232,7 @@ async function viewPatient(id) {
         <label>الشكوى <input id="cc"></label>
         <label>التشخيص <input id="cd"></label>
         <label>العلاج <textarea id="ct" rows="2"></textarea></label>
+        <label>التكلفة (ج.م) <input id="cf" type="number" inputmode="decimal" min="0" class="ltr"></label>
         <p class="err" id="cerr"></p>
         <button id="cadd">حفظ الحالة</button>
       </div>
@@ -226,11 +245,39 @@ async function viewPatient(id) {
         </div>
         ${c.diagnosis ? `<div class="meta">التشخيص: ${esc(c.diagnosis)}</div>` : ''}
         ${c.treatment ? `<div class="meta">العلاج: ${esc(c.treatment)}</div>` : ''}
+        ${Number(c.fee) > 0 ? `<div class="meta">التكلفة: ${esc(money(c.fee))} — المدفوع: ${esc(money(payments.filter(x => x.case_id === c.id).reduce((s, x) => s + Number(x.amount || 0), 0)))}</div>` : ''}
         <div class="actions">
           <button class="ghost small" data-ctoggle="${esc(c.id)}" data-st="${esc(c.status)}">${c.status === 'open' ? 'تحديد كمكتملة' : 'إعادة فتح'}</button>
           <button class="danger small" data-cdel="${esc(c.id)}">حذف</button>
         </div>
       </div>`).join('') : '<p>لا توجد حالات بعد.</p>'}
+
+    <h2>المدفوعات</h2>
+    ${payErr ? `<p class="err">${esc(payErr)}</p>` : `
+    <details class="card">
+      <summary>تسجيل دفعة</summary>
+      <div style="margin-top:12px">
+        <label>المبلغ (ج.م) <input id="pamt" type="number" inputmode="decimal" min="0" class="ltr"></label>
+        <label>التاريخ <input id="pdate" type="date" class="ltr" value="${today()}"></label>
+        <label>الحالة المرتبطة (اختياري)
+          <select id="pcase"><option value="">بدون</option>
+          ${cases.map(c => `<option value="${esc(c.id)}">${esc(c.complaint || 'حالة')}</option>`).join('')}</select></label>
+        <label>ملاحظات <input id="pnote"></label>
+        <p class="err" id="perr"></p>
+        <button id="padd">حفظ الدفعة</button>
+      </div>
+    </details>
+    ${payments.length ? payments.map(pm => `
+      <div class="card">
+        <div class="row">
+          <div>
+            <div class="name">${esc(money(pm.amount))}</div>
+            <div class="meta">${esc(dateOnly(pm.paid_at))}${pm.case_id ? ' — ' + esc(caseName(pm.case_id)) : ''}</div>
+            ${pm.notes ? `<div class="meta">${esc(pm.notes)}</div>` : ''}
+          </div>
+          <button class="danger small" data-pdel="${esc(pm.id)}">حذف</button>
+        </div>
+      </div>`).join('') : '<p>لا توجد دفعات بعد.</p>'}`}
 
     <h2>المواعيد</h2>
     <details class="card">
@@ -256,7 +303,8 @@ async function viewPatient(id) {
     const { error } = await sb.from('cases').insert({
       patient_id: id, complaint,
       diagnosis: $('#cd').value.trim() || null,
-      treatment: $('#ct').value.trim() || null
+      treatment: $('#ct').value.trim() || null,
+      fee: Number($('#cf').value) || 0
     });
     if (error) { $('#cerr').textContent = 'تعذر الحفظ: ' + error.message; return; }
     viewPatient(id);
@@ -282,6 +330,24 @@ async function viewPatient(id) {
   document.querySelectorAll('[data-cdel]').forEach(b => b.onclick = async () => {
     if (!confirm('حذف هذه الحالة؟')) return;
     await sb.from('cases').delete().eq('id', b.dataset.cdel);
+    viewPatient(id);
+  });
+  if ($('#padd')) $('#padd').onclick = async () => {
+    const amount = Number($('#pamt').value);
+    if (!(amount > 0)) { $('#perr').textContent = 'اكتب مبلغاً أكبر من صفر.'; return; }
+    const { error } = await sb.from('payments').insert({
+      patient_id: id,
+      case_id: $('#pcase').value || null,
+      amount,
+      paid_at: $('#pdate').value || today(),
+      notes: $('#pnote').value.trim() || null
+    });
+    if (error) { $('#perr').textContent = 'تعذر الحفظ: ' + error.message; return; }
+    viewPatient(id);
+  };
+  document.querySelectorAll('[data-pdel]').forEach(b => b.onclick = async () => {
+    if (!confirm('حذف هذه الدفعة؟')) return;
+    await sb.from('payments').delete().eq('id', b.dataset.pdel);
     viewPatient(id);
   });
   bindAppts(() => viewPatient(id));
