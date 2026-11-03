@@ -5,23 +5,25 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Sukon</title>
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#14213d">
+<meta name="theme-color" content="#29677e">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet"></noscript>
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Sukon">
 
 <style>
-:root{--navy:#14213d;--navy-2:#22345c;--ink:#14213d;--paper:#f4f6fa;--card:#ffffff;--line:#d9dfeb;--edge:#c5cde0;--danger:#a4262c;--muted:#5b6780;--soft:#e8edf6}
+:root{--navy:#29677e;--navy-2:#3a7c87;--mint:#8ad9be;--ink:#1f3555;--paper:#f3f8f7;--card:#ffffff;--line:#d3e5e0;--edge:#bcd6d2;--danger:#a4262c;--muted:#5d7580;--soft:#e2f4ee}
 *{box-sizing:border-box}
 body{margin:0;padding-bottom:calc(78px + env(safe-area-inset-bottom,0px));background:var(--paper);color:var(--ink);font-family:"Cairo","Segoe UI",Tahoma,sans-serif;font-size:16px;line-height:1.6}
 main{max-width:640px;margin:0 auto;padding:16px;position:relative;z-index:1}
 h1{font-size:1.4rem;margin:0}
 h2{font-size:1.05rem;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line)}
 p{margin:0 0 12px;color:var(--muted)}
+.brandlogo{display:block;width:min(62vw,260px);height:auto;margin:16px auto 14px}
 .brand{font-family:Georgia,"Times New Roman",serif;font-size:2.2rem;font-weight:700;text-align:center;letter-spacing:.08em;margin:28px 0 16px;color:var(--navy)}
 .card{background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:10px}
 .card h1{margin-bottom:8px}
@@ -53,7 +55,7 @@ summary{cursor:pointer;font-weight:700;color:var(--navy)}
 .remind{width:100%;text-align:right;background:var(--soft);color:var(--navy);border:1px solid var(--navy);padding:10px 14px;border-radius:8px;margin-bottom:10px;font-weight:700}
 .bottomnav{position:fixed;left:0;right:0;bottom:0;display:flex;background:#fff;border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px);z-index:10}
 .bottomnav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;background:transparent;color:var(--muted);border:0;border-top:3px solid transparent;border-radius:0;padding:8px 0 10px;font-size:.8rem}
-.bottomnav button.on{color:var(--navy);border-top-color:var(--navy)}
+.bottomnav button.on{color:var(--navy);border-top-color:var(--mint)}
 details.card{padding:0;overflow:hidden}
 details.card>summary{list-style:none;display:block;text-align:center;background:var(--navy);color:#fff;padding:12px 14px}
 details.card>summary::-webkit-details-marker{display:none}
@@ -61,7 +63,7 @@ details.card>summary::before{content:"+  ";font-weight:700}
 details.card[open]>summary::before{content:"\2212  "}
 details.card>div{padding:14px !important;margin-top:0 !important}
 .btn.primary{background:var(--navy);color:#fff;border-color:var(--navy)}
-body::before{content:"";position:fixed;left:0;right:0;top:0;bottom:0;background:url(watermark.png) center 40%/min(92vw,520px) no-repeat;opacity:.10;pointer-events:none;z-index:0}
+body::before{content:"";position:fixed;left:0;right:0;top:0;bottom:0;background:url(watermark.png) center 42%/min(84vw,460px) no-repeat;opacity:.12;pointer-events:none;z-index:0;will-change:transform;transform:translateZ(0)}
 </style>
 </head>
 <body>
@@ -79,6 +81,18 @@ const dateOnly = d => new Date(d + 'T00:00:00').toLocaleDateString('ar-EG', { da
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 const CASE_ST = { open: 'مفتوحة', closed: 'مكتملة' };
 const APPT_ST = { scheduled: 'محجوز', done: 'تم', cancelled: 'ملغي' };
+
+const slow = (p, ms = 12000) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
+function lock(b) { b.disabled = true; return () => { b.disabled = false; }; }
+function showRetry(retry, msg) {
+  const html = '<div><p class="err">' + esc(msg || 'الاتصال بطيء أو غير متاح.') + '</p><button class="ghost" id="retry">إعادة المحاولة</button></div>';
+  const ld = $('#loading');
+  if (ld) ld.outerHTML = html; else app.insertAdjacentHTML('beforeend', html);
+  const b = $('#retry'); if (b) b.onclick = retry;
+}
+let todayCache = { at: 0, t: 0, m: 0 }, todayInflight = null;
+let patientsCache = null, patientsToken = 0, searchTimer = null, shownPatients = [];
+const PAGE = 30;
 
 function getCfg() {
   try { return JSON.parse(localStorage.getItem('cfg') || 'null'); } catch (e) { return null; }
@@ -135,30 +149,45 @@ function dayTag(iso) {
   return diff === 0 ? 'اليوم' : diff === 1 ? 'غداً' : '';
 }
 
-async function loadTodayBar() {
-  const box = $('#todayBar');
-  if (!box) return;
-  const start = new Date(); start.setHours(0, 0, 0, 0);
-  const mid = new Date(start.getTime() + 86400000);
-  const end = new Date(start.getTime() + 2 * 86400000);
-  const { data, error } = await sb.from('appointments').select('starts_at')
-    .eq('status', 'scheduled')
-    .gte('starts_at', start.toISOString()).lt('starts_at', end.toISOString());
+function renderTodayBar() {
   const bar = $('#todayBar');
-  if (!bar || error || !data || !data.length) return;
-  const t = data.filter(a => new Date(a.starts_at) < mid).length;
-  const m = data.length - t;
+  if (!bar) return;
   const parts = [];
-  if (t) parts.push('اليوم: ' + t);
-  if (m) parts.push('غداً: ' + m);
+  if (todayCache.t) parts.push('اليوم: ' + todayCache.t);
+  if (todayCache.m) parts.push('غداً: ' + todayCache.m);
+  if (!parts.length) { bar.innerHTML = ''; return; }
   bar.innerHTML = '<button class="remind" id="goAppts">مواعيد قادمة — ' + parts.join(' | ') + '</button>';
   $('#goAppts').onclick = viewAppointments;
+}
+
+async function loadTodayBar() {
+  if (!$('#todayBar')) return;
+  if (Date.now() - todayCache.at < 60000) { renderTodayBar(); return; }
+  if (!todayInflight) {
+    todayInflight = (async () => {
+      const start = new Date(); start.setHours(0, 0, 0, 0);
+      const mid = new Date(start.getTime() + 86400000);
+      const end = new Date(start.getTime() + 2 * 86400000);
+      try {
+        const { data, error } = await slow(sb.from('appointments').select('starts_at')
+          .eq('status', 'scheduled')
+          .gte('starts_at', start.toISOString()).lt('starts_at', end.toISOString()));
+        if (!error && data) {
+          const t = data.filter(a => new Date(a.starts_at) < mid).length;
+          todayCache = { at: Date.now(), t, m: data.length - t };
+        }
+      } catch (e) { /* نتجاهل: الشريط اختياري */ }
+      todayInflight = null;
+    })();
+  }
+  await todayInflight;
+  renderTodayBar();
 }
 
 /* ---------- الإعداد وتسجيل الدخول ---------- */
 function viewSetup() {
   app.innerHTML = `
-    <div class="brand">Sukon</div>
+    <img class="brandlogo" src="watermark.png" alt="Sukon" width="300" height="366">
     <section class="card">
       <h1>ربط التطبيق بقاعدة البيانات</h1>
       <p>الصق بيانات مشروعك من Supabase. تُحفظ على هذا الجهاز فقط.</p>
@@ -180,7 +209,7 @@ function viewSetup() {
 
 function viewLogin() {
   app.innerHTML = `
-    <div class="brand">Sukon</div>
+    <img class="brandlogo" src="watermark.png" alt="Sukon" width="300" height="366">
     <section class="card">
       <h1>تسجيل الدخول</h1>
       <label>البريد الإلكتروني
@@ -232,7 +261,7 @@ function viewPatients() {
     </details>
     <label>بحث بالاسم <input id="search" type="search"></label>
     <div id="list"></div>`);
-  $('#search').oninput = e => loadPatients(e.target.value.trim());
+  $('#search').oninput = e => { clearTimeout(searchTimer); const v = e.target.value.trim(); searchTimer = setTimeout(() => loadPatients(v), 300); };
   $('#add').onclick = () => addPatient(false);
   $('#addAppt').onclick = () => addPatient(true);
   $('#pname').oninput = () => { $('#addAppt').hidden = !$('#pname').value.trim(); };
@@ -242,25 +271,26 @@ function viewPatients() {
 async function addPatient(openAppt) {
   const name = $('#pname').value.trim();
   if (!name) { $('#err').textContent = 'اكتب اسم المريض.'; return; }
+  const btns = [$('#add'), $('#addAppt')];
+  const setBusy = v => btns.forEach(b => { b.disabled = v; });
+  setBusy(true);
   const { data, error } = await sb.from('patients').insert({
     name,
     phone: $('#pphone').value.trim() || null,
     birth_date: $('#pbirth').value || null,
     notes: $('#pnotes').value.trim() || null
   }).select().single();
-  if (error) { $('#err').textContent = 'تعذر الحفظ: ' + error.message; return; }
+  if (error) { setBusy(false); $('#err').textContent = 'تعذر الحفظ: ' + error.message; return; }
+  patientsCache = null;
   if (openAppt && data) viewPatient(data.id, true);
   else viewPatients();
 }
 
-async function loadPatients(q = '') {
-  let query = sb.from('patients').select('*').order('created_at', { ascending: false });
-  if (q) query = query.ilike('name', '%' + q + '%');
-  const { data, error } = await query;
+function renderPatients(rows, hasMore) {
   const list = $('#list');
-  if (error) { list.innerHTML = `<p class="err">تعذر تحميل المرضى: ${esc(error.message)}</p>`; return; }
-  if (!data.length) { list.innerHTML = '<p>لا يوجد مرضى بعد. اضغط "إضافة مريض" لتسجيل أول مريض.</p>'; return; }
-  list.innerHTML = data.map(p => `
+  if (!list) return;
+  if (!rows.length) { list.innerHTML = '<p>لا يوجد مرضى بعد. اضغط "إضافة مريض" لتسجيل أول مريض.</p>'; return; }
+  list.innerHTML = rows.map(p => `
     <div class="card">
       <div class="row">
         <div>
@@ -270,25 +300,62 @@ async function loadPatients(q = '') {
         </div>
         <button class="danger small" data-del="${esc(p.id)}">حذف</button>
       </div>
-    </div>`).join('');
+    </div>`).join('') + (hasMore ? '<button class="ghost" id="more" style="width:100%">عرض المزيد</button>' : '');
   list.querySelectorAll('[data-open]').forEach(b => b.onclick = () => viewPatient(b.dataset.open));
   list.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
     if (!confirm('حذف المريض وكل حالاته ومواعيده؟')) return;
+    b.disabled = true;
     await sb.from('patients').delete().eq('id', b.dataset.del);
+    patientsCache = null; todayCache.at = 0;
     loadPatients($('#search').value.trim());
   });
+  const more = $('#more');
+  if (more) more.onclick = () => { more.disabled = true; loadPatients($('#search').value.trim(), true); };
+}
+
+async function loadPatients(q = '', more = false) {
+  const list = $('#list');
+  if (!list) return;
+  const token = ++patientsToken;
+  const offset = more ? shownPatients.length : 0;
+  if (!more) {
+    if (!q && patientsCache) { shownPatients = patientsCache.rows; renderPatients(patientsCache.rows, patientsCache.hasMore); }
+    else if (!shownPatients.length || q) list.innerHTML = '<p>جارٍ التحميل...</p>';
+  }
+  let res;
+  try {
+    let query = sb.from('patients').select('id,name,phone,birth_date,notes')
+      .order('created_at', { ascending: false }).range(offset, offset + PAGE);
+    if (q) query = query.ilike('name', '%' + q + '%');
+    res = await slow(query);
+  } catch (e) {
+    if (token !== patientsToken) return;
+    list.innerHTML = '<p class="err">الاتصال بطيء أو غير متاح.</p><button class="ghost" id="retry">إعادة المحاولة</button>';
+    $('#retry').onclick = () => loadPatients(q);
+    return;
+  }
+  if (token !== patientsToken) return;      // وصل ردّ أقدم من بحث أحدث
+  if (res.error) { list.innerHTML = `<p class="err">تعذر تحميل المرضى: ${esc(res.error.message)}</p>`; return; }
+  const hasMore = res.data.length > PAGE;
+  const rows = res.data.slice(0, PAGE);
+  shownPatients = more ? shownPatients.concat(rows) : rows;
+  if (!q && !more) patientsCache = { rows, hasMore };
+  renderPatients(shownPatients, hasMore);
 }
 
 /* ---------- صفحة المريض: الحالات والمواعيد ---------- */
 async function viewPatient(id, openAppt = false) {
-  shell('p', '<p>جارٍ التحميل...</p>');
-  const [pr, cr, ar, payr] = await Promise.all([
+  shell('p', '<p id="loading">جارٍ التحميل...</p>');
+  let pr, cr, ar, payr;
+  try {
+  [pr, cr, ar, payr] = await slow(Promise.all([
     sb.from('patients').select('*').eq('id', id).single(),
     sb.from('cases').select('*').eq('patient_id', id).order('created_at', { ascending: false }),
     sb.from('appointments').select('*').eq('patient_id', id).order('starts_at', { ascending: false }),
     sb.from('payments').select('*').eq('patient_id', id).order('paid_at', { ascending: false })
-  ]);
-  if (pr.error) { app.insertAdjacentHTML('beforeend', `<p class="err">${esc(pr.error.message)}</p>`); return; }
+  ]));
+  } catch (e) { showRetry(() => viewPatient(id, openAppt)); return; }
+  if (pr.error) { showRetry(() => viewPatient(id, openAppt), pr.error.message); return; }
   const p = pr.data, cases = cr.data || [], appts = ar.data || [];
   const payments = payr.error ? [] : (payr.data || []);
   const payErr = payr.error ? 'لم يتم إنشاء جدول المدفوعات بعد. شغّل كود SQL الخاص بها في Supabase.' : '';
@@ -383,29 +450,32 @@ async function viewPatient(id, openAppt = false) {
 
   $('#back').onclick = viewPatients;
 
-  $('#cadd').onclick = async () => {
+  $('#cadd').onclick = async (ev) => {
     const complaint = $('#cc').value.trim();
     if (!complaint) { $('#cerr').textContent = 'اكتب الشكوى.'; return; }
+    const unlock = lock(ev.currentTarget);
     const { error } = await sb.from('cases').insert({
       patient_id: id, complaint,
       diagnosis: $('#cd').value.trim() || null,
       treatment: $('#ct').value.trim() || null,
       fee: Number($('#cf').value) || 0
     });
-    if (error) { $('#cerr').textContent = 'تعذر الحفظ: ' + error.message; return; }
+    if (error) { unlock(); $('#cerr').textContent = 'تعذر الحفظ: ' + error.message; return; }
     viewPatient(id);
   };
 
-  $('#aadd').onclick = async () => {
+  $('#aadd').onclick = async (ev) => {
     const v = $('#adt').value;
     if (!v) { $('#aerr').textContent = 'اختر التاريخ والوقت.'; return; }
+    const unlock = lock(ev.currentTarget);
     const { error } = await sb.from('appointments').insert({
       patient_id: id,
       case_id: $('#acase').value || null,
       starts_at: new Date(v).toISOString(),
       notes: $('#anotes').value.trim() || null
     });
-    if (error) { $('#aerr').textContent = 'تعذر الحفظ: ' + error.message; return; }
+    if (error) { unlock(); $('#aerr').textContent = 'تعذر الحفظ: ' + error.message; return; }
+    todayCache.at = 0;
     viewPatient(id);
   };
 
@@ -418,9 +488,10 @@ async function viewPatient(id, openAppt = false) {
     await sb.from('cases').delete().eq('id', b.dataset.cdel);
     viewPatient(id);
   });
-  if ($('#padd')) $('#padd').onclick = async () => {
+  if ($('#padd')) $('#padd').onclick = async (ev) => {
     const amount = Number($('#pamt').value);
     if (!(amount > 0)) { $('#perr').textContent = 'اكتب مبلغاً أكبر من صفر.'; return; }
+    const unlock = lock(ev.currentTarget);
     const { error } = await sb.from('payments').insert({
       patient_id: id,
       case_id: $('#pcase').value || null,
@@ -428,7 +499,7 @@ async function viewPatient(id, openAppt = false) {
       paid_at: $('#pdate').value || today(),
       notes: $('#pnote').value.trim() || null
     });
-    if (error) { $('#perr').textContent = 'تعذر الحفظ: ' + error.message; return; }
+    if (error) { unlock(); $('#perr').textContent = 'تعذر الحفظ: ' + error.message; return; }
     viewPatient(id);
   };
   document.querySelectorAll('[data-pdel]').forEach(b => b.onclick = async () => {
@@ -481,11 +552,13 @@ function apptCard(a, extra, patient) {
 function bindAppts(reload) {
   document.querySelectorAll('[data-ast]').forEach(b => b.onclick = async () => {
     await sb.from('appointments').update({ status: b.dataset.ast }).eq('id', b.dataset.aid);
+    todayCache.at = 0;
     reload();
   });
   document.querySelectorAll('[data-adel]').forEach(b => b.onclick = async () => {
     if (!confirm('حذف هذا الموعد؟')) return;
     await sb.from('appointments').delete().eq('id', b.dataset.adel);
+    todayCache.at = 0;
     reload();
   });
 }
@@ -493,10 +566,15 @@ function bindAppts(reload) {
 async function viewAppointments() {
   shell('a', '<p id="loading">جارٍ التحميل...</p>');
   const from = new Date(); from.setHours(0, 0, 0, 0);
-  const { data, error } = await sb.from('appointments')
-    .select('*, patients(name, phone)')
-    .gte('starts_at', from.toISOString())
-    .order('starts_at', { ascending: true });
+  let res;
+  try {
+    res = await slow(sb.from('appointments')
+      .select('id,starts_at,status,notes,patients(name,phone)')
+      .gte('starts_at', from.toISOString())
+      .order('starts_at', { ascending: true })
+      .limit(100));
+  } catch (e) { showRetry(viewAppointments); return; }
+  const { data, error } = res;
   const box = document.createElement('div');
   if (error) box.innerHTML = `<p class="err">تعذر تحميل المواعيد: ${esc(error.message)}</p>`;
   else if (!data.length) box.innerHTML = '<p>لا توجد مواعيد قادمة. أضف موعداً من صفحة المريض.</p>';
@@ -515,6 +593,15 @@ async function start() {
 start();
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
+  navigator.serviceWorker.addEventListener('message', e => {
+    if (e.data !== 'sukon-updated' || $('#upd')) return;
+    const b = document.createElement('button');
+    b.id = 'upd'; b.className = 'remind';
+    b.style.cssText = 'position:fixed;left:12px;right:12px;width:auto;bottom:calc(86px + env(safe-area-inset-bottom,0px));z-index:20';
+    b.textContent = 'يوجد تحديث جديد — اضغط للتحديث';
+    b.onclick = () => location.reload();
+    document.body.appendChild(b);
+  });
 }
 </script>
 </body>
