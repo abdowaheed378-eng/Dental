@@ -65,6 +65,26 @@ details.card[open]>summary::before{content:"\2212  "}
 details.card>div{padding:14px !important;margin-top:0 !important}
 .btn.primary{background:var(--navy);color:#fff;border-color:var(--navy)}
 body::before{content:"";position:fixed;left:0;right:0;top:0;bottom:0;background:url(watermark.png) center 42%/min(84vw,460px) no-repeat;opacity:.12;pointer-events:none;z-index:0;will-change:transform;transform:translateZ(0)}
+.pcard{cursor:pointer}
+.pcard.sel{border-color:var(--navy);box-shadow:0 0 0 1px var(--navy)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px}
+.grid>.card{margin-bottom:0}
+.empty{color:var(--muted);text-align:center;padding:80px 20px;border:1px dashed var(--edge);border-radius:12px}
+@media (min-width:900px){
+  body{padding-bottom:0}
+  body.inapp main{max-width:none;margin:0;margin-right:230px;padding:24px 36px}
+  body.inapp .bottomnav{left:auto;right:0;top:0;bottom:0;width:230px;flex-direction:column;justify-content:flex-start;gap:4px;border-top:0;border-left:1px solid var(--line);padding:16px 12px}
+  body.inapp .bottomnav::before{content:"";flex:none;display:block;height:180px;margin-bottom:12px;background:url(watermark.png) center/contain no-repeat}
+  body.inapp .bottomnav button{flex:none;flex-direction:row;justify-content:flex-start;gap:12px;padding:12px 14px;font-size:1rem;border-top:0;border-inline-start:4px solid transparent;border-radius:8px}
+  body.inapp .bottomnav button.on{background:var(--soft);border-inline-start-color:var(--mint)}
+  body.inapp .bottomnav button:hover{background:var(--soft)}
+  .split{display:grid;grid-template-columns:380px minmax(0,1fr);gap:24px;align-items:start}
+  .listcol{position:sticky;top:16px;max-height:calc(100vh - 32px);overflow:auto;padding-inline-start:2px}
+  .pane #back{display:none}
+  body.inapp::before{background-position:calc(50% - 115px) 45%;background-size:min(46vw,520px)}
+  #upd{bottom:20px !important;right:250px !important;left:auto !important;max-width:420px}
+  button:hover:not(:disabled),.btn:hover{filter:brightness(1.08)}
+}
 </style>
 </head>
 <body>
@@ -104,12 +124,15 @@ function showRetry(retry, msg) {
 let todayCache = { at: 0, t: 0, m: 0 }, todayInflight = null;
 let patientsCache = null, patientsToken = 0, searchTimer = null, shownPatients = [];
 const PAGE = 30;
+const wide = window.matchMedia('(min-width: 900px)');
+let selectedId = null, paneId = null;
 
 function getCfg() {
   try { return JSON.parse(localStorage.getItem('cfg') || 'null'); } catch (e) { return null; }
 }
 
 function shell(active, inner) {
+  document.body.classList.add('inapp');
   app.innerHTML = `
     <div class="bar"><h1>Sukon</h1><button class="ghost" id="logout">خروج</button></div>
     <div id="todayBar"></div>${inner}
@@ -197,6 +220,7 @@ async function loadTodayBar() {
 
 /* ---------- الإعداد وتسجيل الدخول ---------- */
 function viewSetup() {
+  document.body.classList.remove('inapp');
   app.innerHTML = `
     <img class="brandlogo" src="watermark.png" alt="Sukon" width="300" height="366">
     <section class="card">
@@ -219,6 +243,7 @@ function viewSetup() {
 }
 
 function viewLogin() {
+  document.body.classList.remove('inapp');
   app.innerHTML = `
     <img class="brandlogo" src="watermark.png" alt="Sukon" width="300" height="366">
     <section class="card">
@@ -255,7 +280,7 @@ function viewLogin() {
 
 /* ---------- المرضى ---------- */
 function viewPatients() {
-  shell('p', `
+  const addHtml = `
     <details class="card" id="addBox">
       <summary>إضافة مريض</summary>
       <div style="margin-top:12px">
@@ -271,7 +296,10 @@ function viewPatients() {
       </div>
     </details>
     <label>بحث بالاسم <input id="search" type="search"></label>
-    <div id="list"></div>`);
+    <div id="list"></div>`;
+  shell('p', wide.matches
+    ? `<div class="split"><section class="listcol">${addHtml}</section><section class="pane" id="pane"><div class="empty">اختر مريضاً من القائمة لعرض حالاته ومواعيده ومدفوعاته</div></section></div>`
+    : addHtml);
   $('#search').oninput = e => { clearTimeout(searchTimer); const v = e.target.value.trim(); searchTimer = setTimeout(() => loadPatients(v), 300); };
   $('#add').onclick = () => addPatient(false);
   $('#addAppt').onclick = () => addPatient(true);
@@ -293,7 +321,7 @@ async function addPatient(openAppt) {
   }).select().single();
   if (error) { setBusy(false); $('#err').textContent = 'تعذر الحفظ: ' + error.message; return; }
   patientsCache = null;
-  if (openAppt && data) viewPatient(data.id, true);
+  if (openAppt && data) { if (wide.matches) viewPatients(); viewPatient(data.id, true); }
   else viewPatients();
 }
 
@@ -302,7 +330,7 @@ function renderPatients(rows, hasMore) {
   if (!list) return;
   if (!rows.length) { list.innerHTML = '<p>لا يوجد مرضى بعد. اضغط "إضافة مريض" لتسجيل أول مريض.</p>'; return; }
   list.innerHTML = rows.map(p => `
-    <div class="card">
+    <div class="card pcard${p.id === selectedId ? ' sel' : ''}" data-id="${esc(p.id)}">
       <div class="row">
         <div>
           <button class="link" data-open="${esc(p.id)}">${esc(p.name)}</button>${p.doctor ? `<span class="docname">— ${esc(p.doctor)}</span>` : ''}
@@ -312,12 +340,13 @@ function renderPatients(rows, hasMore) {
         <button class="danger small" data-del="${esc(p.id)}">حذف</button>
       </div>
     </div>`).join('') + (hasMore ? '<button class="ghost" id="more" style="width:100%">عرض المزيد</button>' : '');
-  list.querySelectorAll('[data-open]').forEach(b => b.onclick = () => viewPatient(b.dataset.open));
+  list.querySelectorAll('.pcard').forEach(c => c.onclick = e => { if (e.target.closest('[data-del]')) return; viewPatient(c.dataset.id); });
   list.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
     if (!confirm('حذف المريض وكل حالاته ومواعيده؟')) return;
     b.disabled = true;
     await sb.from('patients').delete().eq('id', b.dataset.del);
     patientsCache = null; todayCache.at = 0;
+    if (b.dataset.del === selectedId) { selectedId = null; const pn = $('#pane'); if (pn) pn.innerHTML = '<div class="empty">اختر مريضاً من القائمة لعرض حالاته ومواعيده ومدفوعاته</div>'; }
     loadPatients($('#search').value.trim());
   });
   const more = $('#more');
@@ -371,8 +400,17 @@ async function loadPatients(q = '', more = false) {
 }
 
 /* ---------- صفحة المريض: الحالات والمواعيد ---------- */
+function paintPatient(html) {
+  const pane = wide.matches && $('#pane');
+  if (!pane) { shell('p', html); return; }
+  pane.innerHTML = html;
+  document.querySelectorAll('#list .pcard').forEach(c => c.classList.toggle('sel', c.dataset.id === selectedId));
+  if (paneId !== selectedId) { paneId = selectedId; window.scrollTo(0, 0); }
+}
+
 async function viewPatient(id, openAppt = false) {
-  shell('p', '<p id="loading">جارٍ التحميل...</p>');
+  selectedId = id;
+  paintPatient('<p id="loading">جارٍ التحميل...</p>');
   let pr, cr, ar, payr;
   try {
   [pr, cr, ar, payr] = await slow(Promise.all([
@@ -392,7 +430,7 @@ async function viewPatient(id, openAppt = false) {
   const docOpts = [...new Set([...getDocs(), ...cases.map(c => c.doctor).filter(Boolean)])];
   const caseName = cid => { const c = cases.find(x => x.id === cid); return c ? (c.complaint || 'حالة') + (c.doctor ? ' — ' + c.doctor : '') : ''; };
 
-  shell('p', `
+  paintPatient(`
     <button class="ghost small" id="back">رجوع للمرضى</button>
     <div class="card" style="margin-top:10px">
       <div class="name">${esc(p.name)}</div>
@@ -626,7 +664,7 @@ async function viewAppointments() {
   const box = document.createElement('div');
   if (error) box.innerHTML = `<p class="err">تعذر تحميل المواعيد: ${esc(error.message)}</p>`;
   else if (!data.length) box.innerHTML = '<p>لا توجد مواعيد قادمة. أضف موعداً من صفحة المريض.</p>';
-  else box.innerHTML = '<h2>المواعيد القادمة</h2>' + data.map(a => apptCard(a, '')).join('');
+  else box.innerHTML = '<h2>المواعيد القادمة</h2><div class="grid">' + data.map(a => apptCard(a, '')).join('') + '</div>';
   const ld = $('#loading'); if (ld) ld.replaceWith(box);
   bindAppts(viewAppointments);
 }
@@ -638,6 +676,7 @@ async function start() {
   const { data: { session } } = await sb.auth.getSession();
   session ? viewPatients() : viewLogin();
 }
+wide.addEventListener('change', () => { if ($('.bottomnav')) viewPatients(); });
 start();
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
